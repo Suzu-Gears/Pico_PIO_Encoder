@@ -10,9 +10,6 @@
 
 SubstepEncoder encoder;
 
-// substeps per revolution for a 100 PPR encoder counted 4x: 100 * 4 * 64
-const float SUBSTEPS_PER_REV = 100 * 4 * 64.0f;
-
 void setup() {
   Serial.begin(115200);
 
@@ -20,16 +17,23 @@ void setup() {
     Serial.println("No free PIO block for the encoder");
     while (1);
   }
+
+  // quadrature steps per revolution = PPR x 4 (100 PPR encoder -> 400).
+  // This enables the unit helpers used below; the raw substep API
+  // (position() / speed()) works without it
+  encoder.setStepsPerRev(400);
 }
 
 void loop() {
-  // position and speed from one consistent reading
+  // raw, consistent reading in substeps (64 substeps per step)
   SubstepEncoder::Snapshot s = encoder.read();
 
-  Serial.print("Position [rev]: ");
-  Serial.print(s.position / SUBSTEPS_PER_REV, 4);
-  Serial.print(" | Speed [rev/s]: ");
-  Serial.print(s.speed / SUBSTEPS_PER_REV, 4);
+  Serial.print("Position [substeps]: ");
+  Serial.print((long)s.position);
+  Serial.print(" | [rev]: ");
+  Serial.print(encoder.revolutions(), 4);
+  Serial.print(" | Speed [rpm]: ");
+  Serial.print(encoder.rpm(), 2);
   Serial.print(" | stopped: ");
   Serial.println(encoder.stopped());
 

@@ -131,6 +131,40 @@ public:
   // true until the event armed by zeroOnNextIndex() has been processed
   bool zeroPending();
 
+  // substep distance between the two most recent index events (0 until two
+  // events have been latched). For a Z phase this should equal +/- one
+  // revolution in substeps: any deviation means lost or extra steps
+  int64_t lastIndexSpacing();
+
+  // ---- unit conversion helpers (optional) ----
+  // Set how many quadrature steps one revolution has (PPR x 4; e.g. a
+  // 100 PPR encoder counted 4x -> 400). The helpers below return 0 until
+  // this is set. The core API stays in integer substeps
+
+  void setStepsPerRev(uint32_t steps) {
+    substeps_per_rev_ = (int64_t)steps * kSubstepsPerStep;
+  }
+
+  double revolutions() {
+    return substeps_per_rev_ ? (double)position() / (double)substeps_per_rev_ : 0.0;
+  }
+
+  double angleRad() {
+    return revolutions() * 6.283185307179586;
+  }
+
+  float revPerSec() {
+    return substeps_per_rev_ ? (float)speed() / (float)substeps_per_rev_ : 0.0f;
+  }
+
+  float rpm() {
+    return revPerSec() * 60.0f;
+  }
+
+  float radPerSec() {
+    return revPerSec() * 6.2831853f;
+  }
+
   // ---- phase size calibration (optional) ----
   // real encoders have slightly unequal phase sizes, which adds ripple to
   // the speed estimate. When enabled, calibration runs piggybacked on the
@@ -167,6 +201,7 @@ private:
   uint32_t last_refresh_us_ = 0;
   uint32_t min_refresh_interval_us_ = 100;
   bool auto_calibrate_ = false;
+  int64_t substeps_per_rev_ = 0;
 
   // index input state (written by the interrupt handler)
   bool index_attached_ = false;
@@ -176,6 +211,8 @@ private:
   volatile uint32_t index_isr_us_ = 0;
   uint32_t index_processed_count_ = 0;
   int64_t last_index_position_ = 0;
+  int64_t prev_index_position_ = 0;
+  uint32_t index_latch_count_ = 0;
   bool index_latched_ = false;
   bool zero_armed_ = false;
   int64_t zero_target_ = 0;

@@ -79,6 +79,8 @@ See [pico_sdk_example/](pico_sdk_example/) for a complete project.
 | `attachIndex(pin, rising = true, pullUp = true, debounceUs = 0)` | Latch the position on an edge of any GPIO (Z phase, limit switch); `detachIndex()` to stop |
 | `indexSeen()` / `indexCount()` / `lastIndexPosition()` | Index event status and the latched position |
 | `zeroOnNextIndex(pos = 0)` / `zeroPending()` | One-shot homing on the next index event |
+| `lastIndexSpacing()` | Substep distance between the two most recent index events — deviations from one revolution mean lost/extra steps |
+| `setStepsPerRev(steps)` then `revolutions()` / `angleRad()` / `revPerSec()` / `rpm()` / `radPerSec()` | Optional unit helpers (steps = PPR × 4) |
 
 ## Index input (Z phase / limit switch)
 
@@ -137,6 +139,12 @@ optical encoder actually matters to you.
   slower motion, lower it to detect stops faster.
 - **Threading**: one instance must be read from one core at a time; wrap
   reads in your own lock if both cores need the same encoder.
+- **Noise immunity**: RP2040/RP2350 GPIO inputs have Schmitt triggers
+  (enabled by default), and quadrature counting is inherently tolerant of
+  bounce on a single phase (counts go up and back down with no net error).
+  There is no digital glitch filter like STM32 timers offer — for very noisy
+  environments filter in hardware (RC + short leads). The index input has a
+  software debounce parameter instead.
 
 ## Differences from PicoEncoder
 

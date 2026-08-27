@@ -304,11 +304,19 @@ void SubstepEncoder::processIndexEvents() {
 
   int64_t latched = estimator_.positionAt(event_us);
   if (zero_armed_) {
-    estimator_.setPosition(estimator_.position() + (zero_target_ - latched));
+    const int64_t offset = zero_target_ - latched;
+    estimator_.setPosition(estimator_.position() + offset);
+    // shift the stored latch into the new coordinates so that
+    // lastIndexSpacing() stays meaningful across the zeroing
+    last_index_position_ += offset;
     latched = zero_target_;
     zero_armed_ = false;
   }
+  if (index_latched_) {
+    prev_index_position_ = last_index_position_;
+  }
   last_index_position_ = latched;
+  index_latch_count_++;
   index_latched_ = true;
 }
 
@@ -381,6 +389,14 @@ void SubstepEncoder::zeroOnNextIndex(int64_t positionAtIndex) {
 bool SubstepEncoder::zeroPending() {
   maybeRefresh();
   return zero_armed_;
+}
+
+int64_t SubstepEncoder::lastIndexSpacing() {
+  maybeRefresh();
+  if (index_latch_count_ < 2) {
+    return 0;
+  }
+  return last_index_position_ - prev_index_position_;
 }
 
 void SubstepEncoder::maybeRefresh() {
