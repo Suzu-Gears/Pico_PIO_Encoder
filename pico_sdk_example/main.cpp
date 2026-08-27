@@ -19,8 +19,8 @@ int main() {
 
   while (true) {
     SubstepEncoder::Snapshot s = encoder.read();
-    printf("position=%lld substeps, speed=%ld substeps/s\n",
-           (long long)s.position, (long)s.speed);
+    printf("position=%lld steps, speed=%.2f steps/s\n",
+           (long long)s.position, (double)s.speed);
     sleep_ms(100);
   }
 }

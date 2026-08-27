@@ -18,7 +18,8 @@ layer is redesigned (see "Differences from PicoEncoder" below).
   hardware. Read at 10kHz or at 1Hz — position and speed are correct either
   way. (Stop detection is wall-clock based, not sample-count based, so
   results do not depend on how often you read.)
-- **64-bit position** in substeps — never wraps in practice.
+- **64-bit position** — never wraps in practice. Default units are plain
+  quadrature steps; full substep (1/64 step) resolution is one method away.
 - **Zero CPU load** for the tracking itself; a read is a few microseconds of
   FIFO draining and integer math.
 - **One repo, two build systems**: Arduino library (arduino-pico core) and
@@ -41,16 +42,24 @@ void setup() {
 }
 
 void loop() {
-  int64_t pos = encoder.position();  // substeps (64 per quadrature step)
-  int32_t spd = encoder.speed();     // substeps per second
+  int64_t pos = encoder.position();  // quadrature steps (4x counting)
+  float spd = encoder.speed();       // steps per second (fractional)
 
   // or, for a guaranteed-consistent pair:
   SubstepEncoder::Snapshot s = encoder.read();
+
+  // full 1/64-step resolution when you need it:
+  int64_t pos_ss = encoder.positionSubsteps();
+  int32_t spd_ss = encoder.speedSubsteps();
 }
 ```
 
-For a 100 PPR encoder counted 4x there are `100 * 4 * 64 = 25600` substeps
-per revolution.
+Default units are quadrature steps: a 100 PPR encoder counted 4x gives
+`400` steps per revolution. Internally everything runs in substeps
+(1/64 step, `25600` per revolution for the same encoder) — that is where
+the smooth low-speed estimates come from — and the `*Substeps()` getters
+expose that full resolution. `speed()` is fractional (float) so nothing is
+lost at low speed even in step units.
 
 ## Usage (Pico SDK)
 
@@ -67,19 +76,20 @@ See [pico_sdk_example/](pico_sdk_example/) for a complete project.
 |--------|-------------|
 | `begin(firstPin, pullUp = true)` | Start tracking. Phases on `firstPin` / `firstPin+1` (must be consecutive GPIOs). Returns 0 on success, -1 if no PIO block is free |
 | `begin(firstPin, pio, pullUp)` | Same, but force a specific PIO block (useful alongside other PIO libraries) |
-| `position()` | Position in substeps, `int64_t` |
-| `speed()` | Speed in substeps per second, `int32_t` |
+| `position()` | Position in quadrature steps, `int64_t` |
+| `speed()` | Speed in steps per second, `float` (fractional) |
+| `positionSubsteps()` / `speedSubsteps()` | Full 1/64-step resolution (`int64_t` substeps, `int32_t` substeps/s) |
 | `stopped()` | True when no transition arrived within the idle timeout |
-| `read()` | `{position, speed, timestamp_us}` from one consistent reading |
+| `read()` | `{position, speed, timestamp_us}` from one consistent reading (step units) |
 | `refresh()` | Force a hardware re-read now |
-| `resetPosition(to = 0)` | Set the current position |
+| `resetPosition(to = 0)` | Set the current position in steps |
 | `setMinRefreshIntervalUs(us)` | Getters re-read the hardware when the last reading is older than this (default 100µs) |
 | `setIdleTimeoutUs(us)` | No transition for this long ⇒ speed snaps to 0 (default 50ms, see below) |
 | `enableAutoCalibration()` / `calibrationReady()` / `getPhases()` / `setPhases(p)` | Optional phase-size calibration |
 | `attachIndex(pin, rising = true, pullUp = true, debounceUs = 0)` | Latch the position on an edge of any GPIO (Z phase, limit switch); `detachIndex()` to stop |
 | `indexSeen()` / `indexCount()` / `lastIndexPosition()` | Index event status and the latched position |
 | `zeroOnNextIndex(pos = 0)` / `zeroPending()` | One-shot homing on the next index event |
-| `lastIndexSpacing()` | Substep distance between the two most recent index events — deviations from one revolution mean lost/extra steps |
+| `lastIndexSpacing()` | Distance in steps between the two most recent index events — deviations from one revolution mean lost/extra steps |
 | `setStepsPerRev(steps)` then `revolutions()` / `angleRad()` / `revPerSec()` / `rpm()` / `radPerSec()` | Optional unit helpers (steps = PPR × 4) |
 
 ## Index input (Z phase / limit switch)
@@ -152,7 +162,7 @@ optical encoder actually matters to you.
 |--|-------------|----------------|
 | Read contract | call `update()` once per control loop | getters self-refresh, any rate |
 | Stop detection | after 3 samples with no step (rate-dependent) | wall-clock timeout (rate-independent) |
-| Position | 32-bit substeps (wraps) | 64-bit substeps |
+| Position | 32-bit substeps (wraps) | 64-bit, step units by default |
 | Calibration | separate high-frequency call | piggybacked on reads, opt-in flag |
 | PIO placement | pio0/pio1 automatic | + RP2350 pio2, + explicit `begin(pin, pio)` |
 | Cores | Arduino (mbed + arduino-pico) | arduino-pico + plain Pico SDK |

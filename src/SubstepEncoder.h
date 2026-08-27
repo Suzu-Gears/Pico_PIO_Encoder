@@ -36,8 +36,8 @@ public:
 
   // one consistent reading (position and speed from the same refresh)
   struct Snapshot {
-    int64_t position;      // substeps
-    int32_t speed;         // substeps per second
+    int64_t position;       // quadrature steps
+    float speed;            // steps per second
     uint32_t timestamp_us;  // when the underlying sample was taken
   };
 
@@ -55,12 +55,23 @@ public:
   int begin(uint firstPin, PIO pio, bool pullUp = true);
 
   // ---- readings (self-refreshing, valid at any call rate) ----
+  // Default units are quadrature steps (4x counting: PPR x 4 steps per
+  // revolution, e.g. 400 for a 100 PPR encoder). The estimator still works
+  // in substeps internally, so speed keeps its low-speed resolution as a
+  // fractional value. Use the *Substeps() variants for the full 1/64-step
+  // resolution.
 
-  // position in substeps (64-bit, does not wrap)
+  // position in steps (64-bit, does not wrap)
   int64_t position();
 
-  // speed in substeps per second
-  int32_t speed();
+  // speed in steps per second (fractional)
+  float speed();
+
+  // full resolution position in substeps (64 per step)
+  int64_t positionSubsteps();
+
+  // full resolution speed in substeps per second
+  int32_t speedSubsteps();
 
   // true if no transition has arrived for the idle timeout
   bool stopped();
@@ -74,7 +85,7 @@ public:
   // when the last reading is older than the min refresh interval)
   void refresh();
 
-  // set the current position (default: zero it)
+  // set the current position in steps (default: zero it)
   void resetPosition(int64_t to = 0);
 
   // getters trigger a hardware re-read when the last reading is older than
@@ -121,19 +132,19 @@ public:
     return index_isr_count_;
   }
 
-  // latched position of the most recent index event
+  // latched position of the most recent index event, in steps
   int64_t lastIndexPosition();
 
   // one-shot homing: when the next index event arrives, shift the position
-  // reference so that the latched point equals positionAtIndex
+  // reference so that the latched point equals positionAtIndex (in steps)
   void zeroOnNextIndex(int64_t positionAtIndex = 0);
 
   // true until the event armed by zeroOnNextIndex() has been processed
   bool zeroPending();
 
-  // substep distance between the two most recent index events (0 until two
-  // events have been latched). For a Z phase this should equal +/- one
-  // revolution in substeps: any deviation means lost or extra steps
+  // distance in steps between the two most recent index events (0 until
+  // two events have been latched). For a Z phase this should equal +/- one
+  // revolution in steps: any deviation means lost or extra steps
   int64_t lastIndexSpacing();
 
   // ---- unit conversion helpers (optional) ----
@@ -146,7 +157,7 @@ public:
   }
 
   double revolutions() {
-    return substeps_per_rev_ ? (double)position() / (double)substeps_per_rev_ : 0.0;
+    return substeps_per_rev_ ? (double)positionSubsteps() / (double)substeps_per_rev_ : 0.0;
   }
 
   double angleRad() {
@@ -154,7 +165,7 @@ public:
   }
 
   float revPerSec() {
-    return substeps_per_rev_ ? (float)speed() / (float)substeps_per_rev_ : 0.0f;
+    return substeps_per_rev_ ? (float)speedSubsteps() / (float)substeps_per_rev_ : 0.0f;
   }
 
   float rpm() {

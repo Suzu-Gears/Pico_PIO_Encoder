@@ -25,10 +25,11 @@ void setup() {
 }
 
 void loop() {
-  // raw, consistent reading in substeps (64 substeps per step)
+  // consistent reading in quadrature steps (4x counting; use
+  // positionSubsteps()/speedSubsteps() for 1/64-step resolution)
   SubstepEncoder::Snapshot s = encoder.read();
 
-  Serial.print("Position [substeps]: ");
+  Serial.print("Position [steps]: ");
   Serial.print((long)s.position);
   Serial.print(" | [rev]: ");
   Serial.print(encoder.revolutions(), 4);

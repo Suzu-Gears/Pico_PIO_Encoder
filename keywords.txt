@@ -8,6 +8,8 @@ Snapshot	KEYWORD1
 begin	KEYWORD2
 position	KEYWORD2
 speed	KEYWORD2
+positionSubsteps	KEYWORD2
+speedSubsteps	KEYWORD2
 stopped	KEYWORD2
 read	KEYWORD2
 refresh	KEYWORD2

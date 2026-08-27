@@ -376,13 +376,18 @@ bool SubstepEncoder::indexSeen() {
   return index_latched_;
 }
 
+// substeps -> steps rounded to nearest, valid for both signs
+static inline int64_t substeps_to_steps_rounded(int64_t substeps) {
+  return (substeps + 32) >> 6;
+}
+
 int64_t SubstepEncoder::lastIndexPosition() {
   maybeRefresh();
-  return last_index_position_;
+  return substeps_to_steps_rounded(last_index_position_);
 }
 
 void SubstepEncoder::zeroOnNextIndex(int64_t positionAtIndex) {
-  zero_target_ = positionAtIndex;
+  zero_target_ = positionAtIndex * kSubstepsPerStep;
   zero_armed_ = true;
 }
 
@@ -396,7 +401,7 @@ int64_t SubstepEncoder::lastIndexSpacing() {
   if (index_latch_count_ < 2) {
     return 0;
   }
-  return last_index_position_ - prev_index_position_;
+  return substeps_to_steps_rounded(last_index_position_ - prev_index_position_);
 }
 
 void SubstepEncoder::maybeRefresh() {
@@ -405,14 +410,23 @@ void SubstepEncoder::maybeRefresh() {
   }
 }
 
-int64_t SubstepEncoder::position() {
+int64_t SubstepEncoder::positionSubsteps() {
   maybeRefresh();
   return estimator_.position();
 }
 
-int32_t SubstepEncoder::speed() {
+int32_t SubstepEncoder::speedSubsteps() {
   maybeRefresh();
   return estimator_.speed();
+}
+
+// substeps -> steps: arithmetic shift floors consistently for both signs
+int64_t SubstepEncoder::position() {
+  return positionSubsteps() >> 6;
+}
+
+float SubstepEncoder::speed() {
+  return (float)speedSubsteps() / 64.0f;
 }
 
 bool SubstepEncoder::stopped() {
@@ -422,9 +436,9 @@ bool SubstepEncoder::stopped() {
 
 SubstepEncoder::Snapshot SubstepEncoder::read() {
   maybeRefresh();
-  return { estimator_.position(), estimator_.speed(), last_refresh_us_ };
+  return { estimator_.position() >> 6, (float)estimator_.speed() / 64.0f, last_refresh_us_ };
 }
 
 void SubstepEncoder::resetPosition(int64_t to) {
-  estimator_.setPosition(to);
+  estimator_.setPosition(to * kSubstepsPerStep);
 }
