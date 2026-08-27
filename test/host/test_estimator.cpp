@@ -183,8 +183,27 @@ static void test_calibration() {
   CHECK_NEAR(p3, 0x40, 2);
 }
 
+// ---------------------------------------------------------------------------
+// 7. positionAt: reconstructing the position at an earlier instant (used by
+//    the index input latch) matches the simulated ground truth
+// ---------------------------------------------------------------------------
+static void test_position_at() {
+  ConstSpeedSim sim{ 10000, 1000, 2500, true };
+  Estimator est = run_const_speed(sim, 5000, 1000000, 1000);
+
+  // ground truth: position accumulated since reset at t=5000 is about
+  // (t' - 5000) / 2500 steps of 64 substeps each
+  const uint32_t t_event = 1005000 - 10000;  // 10ms before the last sample
+  const double truth = (double)(t_event - 5000) / 2500.0 * 64.0;
+  CHECK_NEAR(est.positionAt(t_event), truth, 96);
+
+  // and it must differ from the current position by speed * dt
+  CHECK_NEAR(est.position() - est.positionAt(t_event), est.speed() * 0.01, 8);
+}
+
 int main() {
   test_rate_independence();
+  test_position_at();
   test_stop_detection();
   test_reverse();
   test_step_wrap();

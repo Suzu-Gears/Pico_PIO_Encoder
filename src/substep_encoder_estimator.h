@@ -261,6 +261,15 @@ public:
     return speed_;
   }
 
+  // estimate the position the encoder had at an earlier time t_us (e.g.
+  // when an index pulse or a limit switch fired), extrapolating backwards
+  // from the current estimate with the current speed. Only meaningful for
+  // times close to the last update (within the idle timeout)
+  int64_t positionAt(uint32_t t_us) const {
+    const int32_t dt_us = (int32_t)(prev_sample_us_ - t_us);
+    return position_ - ((int64_t)speed_ * dt_us) / 1000000;
+  }
+
   bool stopped() const {
     return stopped_;
   }

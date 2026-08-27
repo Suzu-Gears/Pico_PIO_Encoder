@@ -13,6 +13,7 @@
 
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 #include "hardware/sync.h"
 #include "hardware/timer.h"
 
@@ -164,7 +165,35 @@ void program_init(PIO pio, uint sm, uint pin_A) {
   restore_interrupts(ints);
 }
 
+// ---------------------------------------------------------------------------
+// Index input IRQ dispatch
+//
+// The GPIO bank IRQ is shared: this raw handler only acknowledges and
+// forwards events for the pins registered here, so it coexists with
+// attachInterrupt() from the Arduino core and with other libraries.
+// ---------------------------------------------------------------------------
+
+struct IndexSlot {
+  uint pin;
+  SubstepEncoder *enc;
+};
+
+constexpr int kMaxIndexSlots = 12;
+IndexSlot index_slots[kMaxIndexSlots];
+int index_slot_count = 0;
+bool index_dispatcher_added = false;
+
 }  // namespace
+
+void substep_encoder_index_irq_dispatch() {
+  for (int i = 0; i < index_slot_count; i++) {
+    const uint32_t events = gpio_get_irq_event_mask(index_slots[i].pin);
+    if (events != 0) {
+      gpio_acknowledge_irq(index_slots[i].pin, events);
+      index_slots[i].enc->onIndexIrq();
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // SubstepEncoder
@@ -239,6 +268,119 @@ void SubstepEncoder::refresh() {
     estimator_.updateCalibration(s);
   }
   last_refresh_us_ = s.sample_us;
+
+  if (index_attached_) {
+    processIndexEvents();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Index input
+// ---------------------------------------------------------------------------
+
+// interrupt context: only record the event time (touching the PIO here
+// would race with a refresh in progress)
+void SubstepEncoder::onIndexIrq() {
+  const uint32_t now = time_us_32();
+  if (index_debounce_us_ != 0 && index_isr_count_ != 0 &&
+      (uint32_t)(now - index_isr_us_) < index_debounce_us_) {
+    return;
+  }
+  index_isr_us_ = now;
+  index_isr_count_ = index_isr_count_ + 1;
+}
+
+// called from refresh(): reconstruct the position at the latest event time
+void SubstepEncoder::processIndexEvents() {
+  const uint32_t ints = save_and_disable_interrupts();
+  const uint32_t count = index_isr_count_;
+  const uint32_t event_us = index_isr_us_;
+  restore_interrupts(ints);
+
+  if (count == index_processed_count_) {
+    return;
+  }
+  index_processed_count_ = count;
+
+  int64_t latched = estimator_.positionAt(event_us);
+  if (zero_armed_) {
+    estimator_.setPosition(estimator_.position() + (zero_target_ - latched));
+    latched = zero_target_;
+    zero_armed_ = false;
+  }
+  last_index_position_ = latched;
+  index_latched_ = true;
+}
+
+int SubstepEncoder::attachIndex(uint pin, bool onRisingEdge, bool pullUp, uint32_t debounceUs) {
+  if (index_attached_ || index_slot_count >= kMaxIndexSlots) {
+    return -1;
+  }
+
+  index_pin_ = pin;
+  index_debounce_us_ = debounceUs;
+  index_isr_count_ = 0;
+  index_processed_count_ = 0;
+  index_latched_ = false;
+  zero_armed_ = false;
+
+  gpio_init(pin);
+  gpio_set_dir(pin, false);
+  gpio_set_pulls(pin, pullUp, false);
+
+  const uint32_t ints = save_and_disable_interrupts();
+  index_slots[index_slot_count] = { pin, this };
+  index_slot_count++;
+  restore_interrupts(ints);
+
+  if (!index_dispatcher_added) {
+    index_dispatcher_added = true;
+    gpio_add_raw_irq_handler(pin, substep_encoder_index_irq_dispatch);
+  }
+  gpio_set_irq_enabled(pin, onRisingEdge ? GPIO_IRQ_EDGE_RISE : GPIO_IRQ_EDGE_FALL, true);
+  irq_set_enabled(IO_IRQ_BANK0, true);
+
+  index_attached_ = true;
+  return 0;
+}
+
+void SubstepEncoder::detachIndex() {
+  if (!index_attached_) {
+    return;
+  }
+  gpio_set_irq_enabled(index_pin_, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
+
+  const uint32_t ints = save_and_disable_interrupts();
+  for (int i = 0; i < index_slot_count; i++) {
+    if (index_slots[i].enc == this) {
+      index_slots[i] = index_slots[index_slot_count - 1];
+      index_slot_count--;
+      break;
+    }
+  }
+  restore_interrupts(ints);
+
+  index_attached_ = false;
+}
+
+bool SubstepEncoder::indexSeen() {
+  maybeRefresh();
+  return index_latched_;
+}
+
+int64_t SubstepEncoder::lastIndexPosition() {
+  maybeRefresh();
+  return last_index_position_;
+}
+
+void SubstepEncoder::zeroOnNextIndex(int64_t positionAtIndex) {
+  zero_target_ = positionAtIndex;
+  zero_armed_ = true;
+}
+
+bool SubstepEncoder::zeroPending() {
+  maybeRefresh();
+  return zero_armed_;
 }
 
 void SubstepEncoder::maybeRefresh() {

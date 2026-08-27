@@ -76,6 +76,48 @@ See [pico_sdk_example/](pico_sdk_example/) for a complete project.
 | `setMinRefreshIntervalUs(us)` | Getters re-read the hardware when the last reading is older than this (default 100µs) |
 | `setIdleTimeoutUs(us)` | No transition for this long ⇒ speed snaps to 0 (default 50ms, see below) |
 | `enableAutoCalibration()` / `calibrationReady()` / `getPhases()` / `setPhases(p)` | Optional phase-size calibration |
+| `attachIndex(pin, rising = true, pullUp = true, debounceUs = 0)` | Latch the position on an edge of any GPIO (Z phase, limit switch); `detachIndex()` to stop |
+| `indexSeen()` / `indexCount()` / `lastIndexPosition()` | Index event status and the latched position |
+| `zeroOnNextIndex(pos = 0)` / `zeroPending()` | One-shot homing on the next index event |
+
+## Index input (Z phase / limit switch)
+
+`attachIndex()` turns any GPIO into a position-latch input. The interrupt
+handler only records a timestamp; the position at that instant is
+reconstructed on the next read from the timestamp and the speed estimate,
+so the latch does not race with the PIO reading and costs almost nothing.
+Accuracy is dominated by interrupt latency (a few µs): even at 6000 rpm on a
+400-step encoder that is only ~5 substeps of error.
+
+- **Encoder Z/index phase**: `attachIndex(pin)` + `zeroOnNextIndex()` gives
+  absolute position within one revolution after the first index. Comparing
+  `lastIndexPosition()` between revolutions detects lost steps.
+- **Limit switch on a linear axis**: `attachIndex(pin, false, true, 10000)`
+  (falling edge, pull-up, 10ms debounce) + `zeroOnNextIndex()` homes the
+  axis; every later hit re-latches, so drift can be monitored or corrected
+  during reciprocating motion. Mechanical switches have hysteresis: home
+  approaching from a consistent direction for best repeatability.
+
+## When do you need phase calibration?
+
+The optional calibration learns the four relative phase sizes of the
+quadrature signal. Whether it helps depends on the encoder technology:
+
+- **Optical incremental encoders** (e.g. the Nidec 24H's): phase asymmetry
+  comes from the physical disc and sensor placement and is often a few
+  percent. Calibration removes the resulting 4-per-step ripple in the speed
+  estimate — worthwhile for smooth low-speed control, harmless to skip.
+- **Magnetic encoders in incremental (ABI) mode** (AS5600, AS5047, ...):
+  the AB signal is synthesized digitally from an angle measurement, so the
+  phase sizes are already uniform and this calibration gains almost
+  nothing. Their dominant error is once-per-revolution (magnet
+  eccentricity), which a per-step model cannot correct — that would need a
+  per-revolution correction referenced to the index (see docs/IDEAS.md).
+- **Limit-switch homing**: calibration is irrelevant to the switch itself;
+  switch hysteresis dominates repeatability.
+
+Hence calibration is off by default; enable it only when speed ripple on an
+optical encoder actually matters to you.
 
 ## Notes
 
@@ -110,8 +152,12 @@ See [pico_sdk_example/](pico_sdk_example/) for a complete project.
 
 ## Roadmap
 
-- Index (Z) pulse support for absolute-within-revolution positioning
-  (`attachIndex(pin)`, GPIO-interrupt based)
+See [docs/IDEAS.md](docs/IDEAS.md) for the full list. Highlights:
+
+- per-revolution error correction for magnetic encoders (index-referenced)
+- cross-core safe snapshots
+- `end()` releasing PIO resources
+- Pico SDK build in CI
 
 ## License
 

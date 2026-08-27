@@ -25,6 +25,9 @@
 
 #include "substep_encoder_estimator.h"
 
+// internal GPIO IRQ dispatcher for index inputs, do not call directly
+void substep_encoder_index_irq_dispatch();
+
 class SubstepEncoder {
 public:
   // each quadrature step is divided into 64 substeps; a 4x-counted encoder
@@ -88,6 +91,46 @@ public:
     estimator_.setIdleTimeoutUs(us);
   }
 
+  // ---- index input: Z phase, limit switch, home sensor (optional) ----
+  // Latches the encoder position at the moment of an edge on an ordinary
+  // GPIO. The interrupt handler only records a timestamp; the position at
+  // that instant is reconstructed on the next read from the timestamp and
+  // the speed estimate (typically accurate to a few substeps).
+  //
+  // Use cases:
+  //  - encoder Z/index phase: absolute position within one revolution
+  //  - limit switch on a linear axis: homing, re-checked on every hit
+  //  - repeatability/drift checks: compare lastIndexPosition() between hits
+  //
+  // Call attachIndex() from the core that should service the interrupt
+  // (typically core 0); attach all index pins from the same core.
+  // For a mechanical switch pass a debounce time (e.g. 10000us); encoder
+  // Z outputs are clean and can use the default of 0.
+  //
+  // Returns 0 on success, -1 if already attached or no slot is free.
+
+  int attachIndex(uint pin, bool onRisingEdge = true, bool pullUp = true,
+                  uint32_t debounceUs = 0);
+  void detachIndex();
+
+  // true once at least one index event has been latched
+  bool indexSeen();
+
+  // number of index events so far (counted in the interrupt, always fresh)
+  uint32_t indexCount() const {
+    return index_isr_count_;
+  }
+
+  // latched position of the most recent index event
+  int64_t lastIndexPosition();
+
+  // one-shot homing: when the next index event arrives, shift the position
+  // reference so that the latched point equals positionAtIndex
+  void zeroOnNextIndex(int64_t positionAtIndex = 0);
+
+  // true until the event armed by zeroOnNextIndex() has been processed
+  bool zeroPending();
+
   // ---- phase size calibration (optional) ----
   // real encoders have slightly unequal phase sizes, which adds ripple to
   // the speed estimate. When enabled, calibration runs piggybacked on the
@@ -125,6 +168,22 @@ private:
   uint32_t min_refresh_interval_us_ = 100;
   bool auto_calibrate_ = false;
 
+  // index input state (written by the interrupt handler)
+  bool index_attached_ = false;
+  uint index_pin_ = 0;
+  uint32_t index_debounce_us_ = 0;
+  volatile uint32_t index_isr_count_ = 0;
+  volatile uint32_t index_isr_us_ = 0;
+  uint32_t index_processed_count_ = 0;
+  int64_t last_index_position_ = 0;
+  bool index_latched_ = false;
+  bool zero_armed_ = false;
+  int64_t zero_target_ = 0;
+
   void readSample(substep_encoder::Sample *s);
   void maybeRefresh();
+  void processIndexEvents();
+  void onIndexIrq();
+
+  friend void substep_encoder_index_irq_dispatch();
 };
