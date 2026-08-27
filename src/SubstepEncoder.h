@@ -150,10 +150,16 @@ public:
   // ---- unit conversion helpers (optional) ----
   // Set how many quadrature steps one revolution has (PPR x 4; e.g. a
   // 100 PPR encoder counted 4x -> 400). The helpers below return 0 until
-  // this is set. The core API stays in integer substeps
+  // this is set. The core API stays in integer substeps.
+  // revolutions()/angleRad() cover the full multi-turn range in double
+  // (numerically exact for ~a century of travel, but double is soft-float
+  // on RP2040/RP2350 — avoid in tight loops). For a fast, forever-lossless
+  // angle use the wrapped-angle helpers further below
 
   void setStepsPerRev(uint32_t steps) {
     substeps_per_rev_ = (int64_t)steps * kSubstepsPerStep;
+    rad_per_substep_ = (float)(6.283185307179586 / (double)substeps_per_rev_);
+    deg_per_substep_ = (float)(360.0 / (double)substeps_per_rev_);
   }
 
   double revolutions() {
@@ -174,6 +180,44 @@ public:
 
   float radPerSec() {
     return revPerSec() * 6.2831853f;
+  }
+
+  // ---- absolute angle within one revolution (lossless) ----
+  // The int64 substep position is the ground truth. Converting it straight
+  // to a float angle degrades once the travel exceeds ~16.7M substeps
+  // (float has 24 mantissa bits), and double math is soft-float on these
+  // chips. The wrapped angle avoids both: the modulo is taken in INTEGER
+  // substeps first and only the small remainder (< substeps per rev, fits
+  // a float exactly to ~1/600 substep) is converted. Full substep
+  // resolution at any mileage, cheap single-precision math.
+  // Combined with zeroOnNextIndex() on a Z phase this is an absolute
+  // within-revolution angle. Requires setStepsPerRev().
+
+  // substeps into the current revolution, [0, stepsPerRev * 64)
+  int32_t positionInRevSubsteps() {
+    if (substeps_per_rev_ == 0) return 0;
+    int64_t m = positionSubsteps() % substeps_per_rev_;
+    if (m < 0) m += substeps_per_rev_;
+    return (int32_t)m;
+  }
+
+  // angle within the current revolution, [0, 2*pi) / [0, 360)
+  float angleInRevRad() {
+    return (float)positionInRevSubsteps() * rad_per_substep_;
+  }
+
+  float angleInRevDeg() {
+    return (float)positionInRevSubsteps() * deg_per_substep_;
+  }
+
+  // completed revolutions (floor), pairs with the wrapped angle above to
+  // represent an exact multi-turn absolute position
+  int64_t turns() {
+    if (substeps_per_rev_ == 0) return 0;
+    const int64_t p = positionSubsteps();
+    int64_t t = p / substeps_per_rev_;
+    if (p < 0 && (p % substeps_per_rev_) != 0) t--;
+    return t;
   }
 
   // ---- phase size calibration (optional) ----
@@ -213,6 +257,8 @@ private:
   uint32_t min_refresh_interval_us_ = 100;
   bool auto_calibrate_ = false;
   int64_t substeps_per_rev_ = 0;
+  float rad_per_substep_ = 0.0f;
+  float deg_per_substep_ = 0.0f;
 
   // index input state (written by the interrupt handler)
   bool index_attached_ = false;

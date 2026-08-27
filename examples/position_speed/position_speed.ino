@@ -31,8 +31,11 @@ void loop() {
 
   Serial.print("Position [steps]: ");
   Serial.print((long)s.position);
-  Serial.print(" | [rev]: ");
-  Serial.print(encoder.revolutions(), 4);
+  // wrapped angle: full substep resolution at any mileage (see README)
+  Serial.print(" | turns: ");
+  Serial.print((long)encoder.turns());
+  Serial.print(" | angle [deg]: ");
+  Serial.print(encoder.angleInRevDeg(), 2);
   Serial.print(" | Speed [rpm]: ");
   Serial.print(encoder.rpm(), 2);
   Serial.print(" | stopped: ");

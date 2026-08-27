@@ -61,6 +61,15 @@ the smooth low-speed estimates come from — and the `*Substeps()` getters
 expose that full resolution. `speed()` is fractional (float) so nothing is
 lost at low speed even in step units.
 
+**Angles without precision decay**: converting the full multi-turn position
+straight to a float angle loses substep resolution after ~16.7M substeps of
+travel (float mantissa), and double math is soft-float on these chips. The
+wrapped-angle helpers take the modulo in integer substeps *first* and only
+convert the small remainder, so `angleInRevRad()` keeps full substep
+resolution forever with cheap float math. Pair it with `turns()` for an
+exact multi-turn representation, and with `zeroOnNextIndex()` on a Z phase
+it becomes an absolute within-revolution angle.
+
 ## Usage (Pico SDK)
 
 ```cmake
@@ -90,7 +99,8 @@ See [pico_sdk_example/](pico_sdk_example/) for a complete project.
 | `indexSeen()` / `indexCount()` / `lastIndexPosition()` | Index event status and the latched position |
 | `zeroOnNextIndex(pos = 0)` / `zeroPending()` | One-shot homing on the next index event |
 | `lastIndexSpacing()` | Distance in steps between the two most recent index events — deviations from one revolution mean lost/extra steps |
-| `setStepsPerRev(steps)` then `revolutions()` / `angleRad()` / `revPerSec()` / `rpm()` / `radPerSec()` | Optional unit helpers (steps = PPR × 4) |
+| `setStepsPerRev(steps)` then `revolutions()` / `angleRad()` / `revPerSec()` / `rpm()` / `radPerSec()` | Optional unit helpers (steps = PPR × 4). Full-range, double-precision (soft-float on these chips — avoid in tight loops) |
+| `angleInRevRad()` / `angleInRevDeg()` / `positionInRevSubsteps()` / `turns()` | Wrapped angle within one revolution + completed turns. Integer modulo first, converted after: full substep resolution at any mileage, fast float math |
 
 ## Index input (Z phase / limit switch)
 
