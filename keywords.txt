@@ -25,6 +25,10 @@ lastIndexSpacing	KEYWORD2
 zeroOnNextIndex	KEYWORD2
 zeroPending	KEYWORD2
 setStepsPerRev	KEYWORD2
+angleInRevRad	KEYWORD2
+angleInRevDeg	KEYWORD2
+positionInRevSubsteps	KEYWORD2
+turns	KEYWORD2
 revolutions	KEYWORD2
 angleRad	KEYWORD2
 revPerSec	KEYWORD2
