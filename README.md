@@ -6,25 +6,12 @@ English | [日本語](./README.ja.md)
 
 PIO encoder library for RP2040 / RP235X, for **Arduino (arduino-pico) and Pico SDK**.
 Read measured position, estimate velocity on its own schedule, and use consecutive
-or separated A/B GPIOs through explicitly named initialization methods. No DMA is used.
+or separated A/B GPIOs through explicitly named initialization methods.
 
-RP235X here means RP2350A/B and RP2354A/B. See the
-[Raspberry Pi chip family](https://www.raspberrypi.com/products/rp2350/) and the
-[validation scope](#validation-and-continuous-integration). SDK identifiers and
-specific tested chip names remain `RP2350`; this family label does not imply
-hardware qualification of every variant.
+**Version 0.4.0** · [日本語](README.ja.md) · [Changelog](CHANGELOG.md) · [Examples](examples/)
 
-**Version 0.4.0** · [日本語](README.ja.md) · [Changelog](CHANGELOG.md) · [Release guide](docs/RELEASING.md)
-
-A PIO program counts encoder steps **and measures transition timing entirely
-in hardware**. The library combines both into a substep-interpolated position
-and a fractional speed estimate for low count rates — where
-naive "count steps per interval" methods only see 0, 1 or 2 counts of noise.
-
-Based on [PicoEncoder](https://github.com/pmarques-dev/PicoEncoder)
-by Paulo Marques, Pedro Pereira and Paulo Costa (BSD 2-clause). See [third-party notices](THIRD_PARTY_NOTICES.md) for license scope and upstream attribution. The PIO
-program is retained for consecutive pins; nonconsecutive pins use a derived two-SM
-program. The estimation and acquisition layers have been separated and extended.
+PIO counts quadrature transitions and measures the time since the latest edge.
+The CPU accumulates 64-bit measured position and calculates interpolated position and velocity.
 
 Start with [wiring](#choose-the-initialization-that-matches-your-wiring),
 [Arduino installation](#installation-and-compatibility), or
@@ -33,8 +20,8 @@ and [timing limits](#timing-and-resource-limits) when configuring your applicati
 
 ## Choose the initialization that matches your wiring
 
-**Check where A and B are connected, then explicitly select one of these calls. There is no automatic mode switching.**
-Use GPIO numbers, not physical header-pin numbers.
+Choose the initializer for the GPIOs connected to A and B.
+Arguments are GPIO numbers, not physical header-pin numbers.
 
 ### Wiring to consecutive GPIOs
 
@@ -49,7 +36,7 @@ if (result != 0) {
 ```
 
 Uses 1 SM per encoder: **up to 4 encoders per PIO**, with a 13-clock input-check loop.
-`beginConsecutive(2, 10)` returns an initialization error; it does not select another mode.
+`beginConsecutive()` returns an initialization error for nonadjacent GPIOs.
 Example: [position_speed](examples/position_speed/position_speed.ino).
 
 ### Wiring to nonconsecutive GPIOs
@@ -84,13 +71,13 @@ The library normally finds compatible free resources; force placement with, for 
 `beginConsecutive(2, 3, pio0)` and `beginNonConsecutive(6, 10, pio1)`.
 Both programs use all 32 instructions, excluding other programs from that block.
 
-**Always check initialization results. Do not run measurements after initialization fails.**
+Check the return value before starting measurements:
 
 | Result | What to check |
 |---|---|
 | 0 | Success |
 | −1 | No resources for the mode and GPIO window. Check encoder count, other PIO libraries and forced placement |
-| −2 | Duplicate/out-of-range pins, nonadjacent pins passed to consecutive mode, invalid PIO, or repeated initialization |
+| −2 | Duplicate/out-of-range pins, nonadjacent pins passed to consecutive mode, invalid PIO or Pull value, or repeated initialization |
 | −3 | Initial PIO acquisition failed; resources have been released |
 
 Snapshot fields `mode`, `pin_a`, `pin_b` and `state_machines` report the selected configuration.
@@ -101,23 +88,22 @@ See [mode validation](docs/PIN_MODES_VALIDATION.md) and [timing limits](#timing-
 ## Installation and compatibility
 
 Use the [arduino-pico core by Earle F. Philhower](https://github.com/earlephilhower/arduino-pico).
-The tested Arduino core is **6.0.0**. The architecture name is `rp2040`, including
-its RP235X boards. Arduino's Mbed RP2040 core, AVR, ESP32 and generic Arduino
-cores are not supported. Standalone **Pico SDK 2.1.1** builds and RP2040-Zero
-hardware tests pass using the same library sources, without Arduino dependencies.
-The SDK example also builds for Pico 2 (RP2350 ARM); RP2350 hardware remains
-unverified. See the [SDK validation record](docs/PICO_SDK_VALIDATION.md).
+The tested core is **6.0.0**; its architecture name is `rp2040` for both chip families.
+Standalone **Pico SDK 2.1.1** uses the same sources without Arduino dependencies.
+Arduino Mbed RP2040, AVR and ESP32 cores are not supported.
 
 1. Add the arduino-pico package index in Arduino IDE's Additional Boards Manager URLs:
    `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`.
 2. Install **Raspberry Pi Pico/RP2040/RP2350** in Boards Manager and select your board.
-3. Download `Pico_PIO_Encoder-0.4.0.zip` from [Releases](https://github.com/Suzu-Gears/Pico_PIO_Encoder/releases),
+3. Download the repository using [Code > Download ZIP](https://github.com/Suzu-Gears/Pico_PIO_Encoder/archive/refs/heads/main.zip),
    then use **Sketch > Include Library > Add .ZIP Library**.
    Alternatively, clone this repository into your sketchbook's `libraries/Pico_PIO_Encoder`.
 4. Open **File > Examples > Pico_PIO_Encoder > position_speed** and set the A/B pins.
 
 No separately installed Arduino library is required. `Wire` is supplied by the
 board core and is only used by the optional Nidec/INA219 bench examples.
+
+## Wiring and input configuration
 
 Connect A/B to the GPIO inputs selected above and share ground. Inputs must be 3.3V-compatible. Do not connect a 5V push-pull output
 directly to the MCU. Encoders sharing a PIO block must fit within its common
@@ -153,9 +139,8 @@ from returning the signal low. PIO inputs are affected too, including with
 `Pull::None`. At 3.3V I/O, the official remedy is a sufficiently strong low-driving
 output or an external pull-down of 8.2kΩ or less. Internal pull-ups work, but the
 encoder output must still drive a valid low. E9 is fixed in silicon steppings
-A3/A4; these stepping names are separate from the A/B package suffixes.
+A3/A4.
 See the [official erratum and revision history](https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf).
-The library configures the requested pulls; it does not correct this electrical fault.
 
 ## Highlights
 
@@ -171,8 +156,6 @@ The library configures the requested pulls; it does not correct this electrical 
 - Initialization, velocity readiness, freshness and saturation are explicit flags.
 - `end()` releases PIO/index resources; reinitialization is supported.
 - Arduino (arduino-pico) and Pico SDK use the same sources.
-- Host tests cover independent schedules, acceleration, startup phase,
-  stop/restart, low speed, reversal, counter/time wrap and index bookkeeping.
 - Optional phase calibration is fed by acquisitions, not velocity updates.
 
 ## Separate position and velocity rates
@@ -190,8 +173,7 @@ auto s = encoder.read();
 
 The interval defaults to **0** (recompute on every acquisition). There is no
 background timer: a due update runs at the next read/refresh and a missed
-update is not replayed. Reading at 1Hz cannot produce a 100Hz estimate.
-`setMinRefreshIntervalUs()` controls hardware acquisition caching;
+update is not replayed. `setMinRefreshIntervalUs()` controls hardware acquisition caching;
 `setSpeedUpdateIntervalUs()` controls the separate velocity estimation interval.
 Use `read()` once per control tick when timing matters. See
 [examples/multirate](examples/multirate/) for 1kHz acquisition and 100Hz logging.
@@ -215,8 +197,7 @@ phase spacing, its transition-based estimate is:
 At low edge rates, a difference of one step uses the measured interval between
 edges. When several steps pass between observations, their accumulated difference
 is divided by the corresponding edge-time difference. Both cases use the same
-calculation; there is no speed threshold that switches between a counting mode
-and a period mode. Optional phase calibration adjusts the boundary positions.
+calculation. Optional phase calibration adjusts the boundary positions.
 The no-new-edge bounds and idle timeout described below also affect the result.
 
 PIO retains the current count and transition age, not a timestamp queue for every
@@ -226,12 +207,12 @@ edge. Recomputing speed faster does not add new encoder observations.
 
 Choose position acquisition to match the application's control loop, then choose
 velocity cadence for the required response, encoder resolution, speed and CPU load.
-The following are starting points, not guaranteed controller performance.
+Use the following starting points and tune them from measured response and timing.
 
 | Use | Position acquisition | Velocity update | Rationale |
 |---|---|---|---|
-| Initial motor evaluation | 1ms (1kHz) | 5–20ms (50–200Hz) | Tested combinations; compare from a 10ms starting point |
-| Prioritize response | Application control period | Every acquisition, setting 0 | Reduces publication delay; at a 1ms control period both update every 1ms |
+| Initial motor evaluation | 1ms (1kHz) | 5–20ms (50–200Hz) | Compare from a 10ms starting point |
+| Prioritize response | Application control period | Every acquisition, setting 0 | Reflect each new acquisition in the velocity estimate |
 | Display/logging | Retain the control acquisition rate | Retain the control setting | Read cached data separately, for example every 20–100ms |
 | Very low speed | Required position response | Tune for edge spacing and response | Also set idle timeout above the longest expected edge gap |
 
@@ -242,8 +223,8 @@ phase-width variation and changing speed. At 400 counts/rev and 1rpm the mean
 interval alone is 150ms, so the default 50ms timeout is too short.
 
 Set maximum sample age above the ordinary acquisition interval and tolerated
-jitter, and measure the complete loop including communication/logging. A 3ms
-freshness limit for 1ms acquisition is one example, not a universal deadline.
+jitter, and measure the complete loop including communication/logging. For example, use a 3ms
+freshness limit for 1ms acquisition.
 Use `UpdateLate`, acquisition timestamps and the examples' timing counters.
 
 `refresh()` always acquires; self-refreshing getters respect the acquisition
@@ -263,7 +244,6 @@ since the latest transition, without per-edge CPU interrupts. The CPU reads a fr
 count/time pair, accumulates the count difference into **64-bit measured position**,
 estimates velocity and publishes a Snapshot. PIO keeps counting between reads,
 subject to the documented wrap/gap limits; the cached Snapshot stays unchanged.
-The protocol retains cumulative state, not the complete history of every edge.
 
 The CPU reconstructs transition time from acquisition time and the elapsed PIO
 loop count (13 system-clock cycles per consecutive loop, 17 per nonconsecutive loop). On a velocity update it divides
@@ -282,10 +262,7 @@ the warming-up status until enough observations are available. These constraints
 do not reconstruct arbitrary acceleration or hidden out-and-back motion.
 
 Stop detection uses elapsed time since the observed transition, independently
-of acquisition and velocity cadence. A sample-count criterion would change its
-effective timeout with the acquisition rate: three unchanged reads correspond
-to roughly 3ms at 1kHz or 30ms at 100Hz. Elapsed-time detection avoids this
-dependency. It is evaluated on acquisitions, including between velocity ticks.
+of acquisition and velocity cadence. It is evaluated on acquisitions, including between velocity updates.
 
 A slower velocity interval reduces computation and can span more transitions,
 but adds update latency. It is neither a fixed-duration averaging window nor an
@@ -296,22 +273,6 @@ position is accumulated from hardware counts and never derived by integrating ve
 See the [Japanese illustrated explanation](README.ja.md) and the implementation:
 [PIO](src/substep_encoder.pio), [acquisition](src/Pico_PIO_Encoder.cpp),
 [motion estimator](src/substep_encoder_motion.h).
-
-### Position and Snapshot types
-
-`position()` and `Snapshot.position` are measured quadrature counts (`int64_t`).
-Interpolation is available separately through `positionSubsteps()` and the angle
-helpers. `speed()` is fractional `float` step/s.
-`resetPosition()` first acquires hardware.
-
-Snapshot contains status, sequence, a 64-bit acquisition timestamp and
-its freshness limit. Its binary layout is not a serialization format.
-Check `positionValid()` / `speedValid()` before using values in a controller.
-Only `latest()` is intended for another core. Self-refreshing getters
-are owner-context APIs. Copy/move of the encoder object is disabled.
-
-See [Snapshot, diagnostics and lifecycle](docs/SNAPSHOT_LIFECYCLE_JA.md) for the
-full contract, including configuration preserved across `end()` and reinitialization.
 
 ## Usage (Arduino)
 
@@ -337,19 +298,9 @@ void loop() {
 }
 ```
 
-Default units are quadrature steps: a 100 PPR encoder counted 4x gives
-`400` steps per revolution. The estimator uses substeps
-(1/64 step, `25600` per revolution for the same encoder) — that is where
-the smooth low-speed estimates come from — and the `*Substeps()` getters
-expose that full resolution. `speed()` is fractional (float) so nothing is
-lost at low speed even in step units.
-
-For angle within a revolution, the wrapped helpers take the modulo in integer
-substeps before converting to float. This avoids loss of angular precision caused
-by converting a large cumulative position directly to float. The result still has
-ordinary floating-point rounding. Use `turns()` alongside the wrapped angle when
-you need to represent multiple revolutions; acquire one Snapshot when both values
-must correspond to exactly the same observation.
+Default units are measured quadrature steps and step/s. A 100 PPR encoder gives
+400 steps per revolution. Each step contains 64 interpolated substeps;
+`*Substeps()` getters expose these units. Interpolation does not increase measured resolution.
 
 ## Angles, speed units and zeroing
 
@@ -383,8 +334,7 @@ encoder.resetPosition(100);  // alternatively assign 100 measured steps here
 ```
 
 `resetPosition()` acquires a sample before changing the coordinate reference.
-It also changes the origin used by angle and revolution helpers; it does not
-move the motor. No extra input is needed for this operation. Absolute mechanical
+It also changes the origin used by angle and revolution helpers. Absolute mechanical
 orientation after power-up requires an external reference or a known starting
 position. Optional input-based homing uses [`attachIndex()`](#index-input-z-phase--limit-switch).
 
@@ -413,11 +363,10 @@ cmake --build build-sdk
 ```
 
 Use `pico2` for a Pico 2 ARM build. The API and both wiring modes are shared
-with Arduino. [Verified versions and hardware scope](docs/PICO_SDK_VALIDATION.md).
+with Arduino.
 The build produces `position_speed.uf2` for consecutive GPIO2/3 and
 `nonconsecutive.uf2` for GPIO2/10. Choose the example matching your wiring and
-edit the pins before flashing. Both examples use USB standard output and leave
-motor control to the application.
+edit the pins before flashing. Both examples print measurements to USB standard output.
 
 ## Cached Snapshot and diagnostics
 
@@ -454,7 +403,9 @@ These flags do not detect every disconnected encoder, glitch or missed edge.
 All hardware/configuration/lifecycle operations have one owner context.
 Initialization, end and index attach/detach are foreground operations. A cached
 copy uses a short IRQ-safe spinlock; the other core must stop reading before the
-object is destroyed. See [multicore_snapshot](examples/multicore_snapshot/) and the
+object is destroyed. Encoder objects cannot be copied or moved.
+For persistent storage, record individual Snapshot fields rather than its binary layout.
+See [multicore_snapshot](examples/multicore_snapshot/) and the
 [detailed lifecycle contract](docs/SNAPSHOT_LIFECYCLE_JA.md).
 
 ## API
@@ -485,29 +436,20 @@ object is destroyed. See [multicore_snapshot](examples/multicore_snapshot/) and 
 
 ## Index input (Z phase / limit switch)
 
-`attachIndex()` reads the PIO count in the GPIO ISR. It does not reconstruct
-past position from the current speed, so slowing/stopping before the next
-foreground read does not corrupt the captured count. The ISR retains the
-most recent two event counts and the first event after `zeroOnNextIndex()`.
-`indexCount()` counts accepted events, even if several arrive between reads.
-`lastIndexSpacing()` uses the most recent two actual events in either direction.
+`attachIndex()` captures the PIO count in a GPIO interrupt. `zeroOnNextIndex()`
+sets the coordinate reference from the next event. `indexCount()` counts accepted
+events, and `lastIndexSpacing()` returns the distance between the latest two.
 
-This is a **software capture with one-step quantization**, not a hardware latch
-synchronous with the Z edge. Interrupt latency plus FIFO read latency still
-cause error at high speeds. No substep accuracy is claimed. Homing shifts the
-measured count reference; the interpolated angle can differ by a fraction of
-a step. Delayed polling does not add constant-speed extrapolation error.
-
-Call hardware/estimator methods on an indexed instance from its IRQ core; `latest()` may be used on another core. All index pins
-managed by this library must use that same core; initialization checks this.
-The FIFO transaction is protected against an index ISR splitting a pair.
-Registering multiple index pins updates the entire raw IRQ mask, and detach
-releases that mask so the SDK/Arduino default callback can use the pin again.
+Capture resolution is one quadrature step. Interrupt and FIFO-read latency affect
+accuracy, especially at high speed. All index inputs must share one IRQ core,
+and that core owns acquisition and settings for indexed instances.
+Other cores may use `latest()`.
 
 For a Z input, use `attachIndex(pin)` and `zeroOnNextIndex()`. For a limit switch,
 use falling edge, pull-up, and a debounce interval appropriate to the switch.
 GPIOs already used by another component must not be shared with the index input.
-## When do you need phase calibration?
+
+## Phase calibration
 
 Calibration learns unequal widths of the four quadrature phases. It can reduce
 phase-related velocity ripple when motion is steady and acquisition is fast
@@ -524,7 +466,7 @@ Only enable it if measured ripple and phase asymmetry justify it. Save and resto
   window; the window cannot be selected independently per encoder. See the
   [Raspberry Pi datasheet](https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf)
   and [Pico SDK PIO GPIO configuration](https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2_common/hardware_pio/include/hardware/pio.h).
-- On RP2350B, a free block selects a suitable GPIO window. Occupied blocks never change window; the original window is restored after final release. A pair such as GPIO15/32 fits neither window and is rejected. Upper GPIOs have not been hardware-tested. Select GPIOs available on your chip and board.
+- On RP2350B, a free block selects a suitable GPIO window. Occupied blocks never change window; the original window is restored after final release. A pair such as GPIO15/32 fits neither window and is rejected.
 - Each 32-instruction PIO program occupies a whole block. Encoders of the same mode share
   a block. `end()` releases its SM(s) for reuse; the last encoder returns the whole
   block and program memory. Destroy on the owner core after all readers stop.
@@ -541,11 +483,10 @@ Only enable it if measured ripple and phase asymmetry justify it. Save and resto
   20 steps/s. Raise it for slower motion; this also delays stop detection.
 - Intermediate reads leave velocity anchors unchanged. Motion that reverses
   and returns to the same count between reads cannot be reliably distinguished
-  from no movement with the retained PIO protocol. Exact arbitrary-motion
-  invariance across different acquisition schedules is not promised.
+  from no movement with the retained PIO protocol.
 - Phase calibration requires acquisitions fast enough to observe every step
   and steady movement. Lowering only the velocity update rate does not reduce
-  calibration acquisition frequency. Disable calibration when comparing rates.
+  calibration acquisition frequency.
 - One control core/context owns hardware access and settings. Other cores may
   call `latest()` to read a coherent cached Snapshot. See
   [Snapshot, diagnostics and lifecycle](docs/SNAPSHOT_LIFECYCLE_JA.md).
@@ -553,23 +494,6 @@ Only enable it if measured ripple and phase asymmetry justify it. Save and resto
   adjacent index events also must be less than 2^31 steps apart.
 - Input bounce/glitches are not digitally filtered. The index input supports
   software debounce. Validate signal quality and count accuracy on hardware.
-
-RP2040-Zero / Nidec hardware tests passed for 1kHz acquisition, 5/10/20ms
-velocity updates, low speed, reversal, and stop across a read gap. See the
-[measured results](docs/VALIDATION_RESULTS.md), Japanese
-[handoff procedure](docs/HARDWARE_VALIDATION_JA.md), and
-[live bench protocol](docs/BENCH_PROTOCOL_JA.md).
-## Differences from PicoEncoder
-
-| | PicoEncoder | Pico_PIO_Encoder |
-|--|-------------|----------------|
-| Read contract | call `update()` once per control loop | getters acquire on demand; velocity interval is separate |
-| Stop detection | after 3 samples with no step (rate-dependent) | wall-clock timeout (rate-independent) |
-| Position | 32-bit substeps (wraps) | 64-bit measured count + separate interpolation |
-| Calibration | separate high-frequency call | piggybacked on reads, opt-in flag |
-| PIO placement | pio0/pio1 automatic | + RP2350 pio2, + explicit `beginConsecutive(A, B, pio)` |
-| Cores | Arduino (mbed + arduino-pico) | arduino-pico + plain Pico SDK |
-| Tests | — | host-side unit tests |
 
 ## Examples and support
 
@@ -592,29 +516,20 @@ Maintainer: Ryota SUZUKI, `suzuki.ryota.ua@tut.jp`.
 ## Validation and continuous integration
 
 RP2040-Zero hardware checks cover both wiring modes, resource release/reuse,
-independent velocity updates and cached multicore Snapshots. Arduino uses
-arduino-pico 6.0.0; standalone SDK hardware checks use Pico SDK 2.1.1.
-RP2350 has been compile-tested, including Arduino GPIO-window code paths;
-RP2350 hardware and upper GPIOs remain unverified.
+independent velocity updates, cached multicore Snapshots and pull selection.
+RP2350 has been compile-tested; its hardware and upper GPIOs remain unverified.
 
 The [CI workflow](.github/workflows/ci.yml) runs on pushes, pull requests and manual
 dispatch: host estimator tests, Arduino Lint, all Arduino examples on RP2040 and
-RP2350, and both SDK examples on Pico / Pico 2 ARM. The core and SDK versions are
-pinned to the tested releases. CI compilation does not replace hardware tests.
+RP2350, and SDK examples and pull-test firmware on Pico / Pico 2 ARM.
 
 See [mode tests](docs/PIN_MODES_VALIDATION.md), [SDK tests](docs/PICO_SDK_VALIDATION.md)
-and [release preparation checks](docs/RELEASE_VALIDATION.md) for results and limits.
-The workflow checks code; it does not create releases or register the library in
-Arduino Library Manager. Maintainers can follow the [release guide](docs/RELEASING.md).
-
-## Future work
-
-See [docs/IDEAS.md](docs/IDEAS.md) for the full list. Highlights:
-
-- per-revolution error correction for magnetic encoders (index-referenced)
-- RP2350 hardware testing, including upper GPIO windows on suitable boards
+and [pull tests](docs/PULL_CONFIGURATION_VALIDATION.md) for conditions and results.
 
 ## License
+
+Based on [PicoEncoder](https://github.com/pmarques-dev/PicoEncoder) by Paulo Marques,
+Pedro Pereira and Paulo Costa, with extended acquisition and estimation.
 
 BSD 2-clause, see [LICENSE](LICENSE). The PIO program is BSD-3-Clause,
 Copyright Raspberry Pi (Trading) Ltd. Full upstream texts and file scope are in
