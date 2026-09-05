@@ -1,4 +1,4 @@
-// SubstepEncoder index input example: homing with a Z phase or limit switch.
+// Pico_PIO_Encoder index input example: homing with a Z phase or limit switch.
 //
 // The index input latches the encoder position at the moment of an edge on
 // any GPIO. Typical uses:
@@ -7,14 +7,14 @@
 //
 // Wiring in this example: encoder A/B on GPIO2+3, index signal on GPIO4.
 
-#include <SubstepEncoder.h>
+#include <Pico_PIO_Encoder.h>
 
-SubstepEncoder encoder;
+Pico_PIO_Encoder encoder;
 
 void setup() {
   Serial.begin(115200);
 
-  if (encoder.begin(2) != 0) {
+  if (encoder.beginConsecutive(2, 3) != 0) {
     Serial.println("No free PIO block for the encoder");
     while (1);
   }
@@ -24,7 +24,7 @@ void setup() {
 
   // For a mechanical limit switch to GND instead, use falling edge with
   // pull-up and a debounce time:
-  // encoder.attachIndex(4, false, true, 10000);
+  // encoder.attachIndex(4, false, Pico_PIO_Encoder::Pull::Up, 10000);
 
   // home: zero the position at the first index event
   encoder.zeroOnNextIndex();
@@ -32,7 +32,7 @@ void setup() {
 }
 
 void loop() {
-  SubstepEncoder::Snapshot s = encoder.read();
+  Pico_PIO_Encoder::Snapshot s = encoder.read();
 
   Serial.print("Position: ");
   Serial.print((long)s.position);

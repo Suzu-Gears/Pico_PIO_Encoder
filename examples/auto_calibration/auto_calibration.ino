@@ -1,4 +1,4 @@
-// SubstepEncoder phase calibration example.
+// Pico_PIO_Encoder phase calibration example.
 //
 // Real encoders have slightly unequal phase sizes, which adds ripple to the
 // speed estimate. With auto calibration enabled, the library learns the
@@ -7,14 +7,14 @@
 // save the result and hardcode it with setPhases() to skip the procedure
 // on the next boot.
 
-#include <SubstepEncoder.h>
+#include <Pico_PIO_Encoder.h>
 
-SubstepEncoder encoder;
+Pico_PIO_Encoder encoder;
 
 void setup() {
   Serial.begin(115200);
 
-  if (encoder.begin(2) != 0) {
+  if (encoder.beginConsecutive(2, 3) != 0) {
     Serial.println("No free PIO block for the encoder");
     while (1);
   }

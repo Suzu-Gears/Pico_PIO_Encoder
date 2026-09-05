@@ -1,0 +1,18 @@
+{
+  "FullOutputRows": 288,
+  "FullOutputDurationMs": 2994,
+  "SteadyRows": 192,
+  "MeanSpeedStepsS": 39822.542,
+  "MeanRpm": 5973.38,
+  "CountRateStepsS": 39822.378,
+  "DifferencePct": 0.0004,
+  "PeakLoggedRpm": 5976.04,
+  "MeanFullCurrentMa": 83.4,
+  "PeakLoggedCurrentMa": 155.3,
+  "MaxReadUs": "123",
+  "MaxWorkUs": "348",
+  "Missed": "0",
+  "Fault": "0",
+  "I2cErrors": "0",
+  "FinalStopped": "1"
+}

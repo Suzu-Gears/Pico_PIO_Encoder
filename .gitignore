@@ -1,3 +1,15 @@
 test/host/test_estimator
 build/
+build-*/
+.deps/
 pico_sdk_example/build/
+
+*.exe
+*.o
+*.elf
+*.uf2
+*.bin
+*.map
+*.zip
+.DS_Store
+Thumbs.db

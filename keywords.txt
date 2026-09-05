@@ -1,11 +1,10 @@
 #######################################
-# Syntax coloring for SubstepEncoder
+# Syntax coloring for Pico_PIO_Encoder
 #######################################
 
-SubstepEncoder	KEYWORD1
+Pico_PIO_Encoder	KEYWORD1
 Snapshot	KEYWORD1
 
-begin	KEYWORD2
 position	KEYWORD2
 speed	KEYWORD2
 positionSubsteps	KEYWORD2
@@ -38,3 +37,26 @@ enableAutoCalibration	KEYWORD2
 calibrationReady	KEYWORD2
 getPhases	KEYWORD2
 setPhases	KEYWORD2
+setSpeedUpdateIntervalUs	KEYWORD2
+latest	KEYWORD2
+initialized	KEYWORD2
+end	KEYWORD2
+setMaxSampleAgeUs	KEYWORD2
+positionValid	KEYWORD2
+speedValid	KEYWORD2
+has	KEYWORD2
+Initialized	LITERAL1
+VelocityValid	LITERAL1
+VelocityWarmingUp	LITERAL1
+Stale	LITERAL1
+UpdateLate	LITERAL1
+SpeedSaturated	LITERAL1
+PositionSaturated	LITERAL1
+
+beginConsecutive	KEYWORD2
+beginNonConsecutive	KEYWORD2
+beginErrorMessage	KEYWORD2
+mode	KEYWORD2
+Pull	KEYWORD1
+ReadFailed	LITERAL1
+PioFault	LITERAL1

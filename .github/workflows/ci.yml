@@ -3,27 +3,38 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   host-tests:
     name: Host unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Build and run estimator tests
         run: make -C test/host run
 
   arduino:
-    name: Compile Arduino examples
-    runs-on: ubuntu-latest
+    name: Arduino / ${{ matrix.board }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [rpipico, rpipico2]
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/compile-sketches@v1
         with:
           platforms: |
             - name: rp2040:rp2040
+              version: "6.0.0"
               source-url: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          fqbn: rp2040:rp2040:rpipico
+          fqbn: rp2040:rp2040:${{ matrix.board }}
           libraries: |
             - source-path: ./
           sketch-paths: |
@@ -31,9 +42,45 @@ jobs:
 
   lint:
     name: Arduino Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/arduino-lint-action@v2
         with:
           compliance: specification
+          library-manager: submit
+
+  pico-sdk:
+    name: Pico SDK 2.1.1 / ${{ matrix.board }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [pico, pico2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: "2.1.1"
+          path: .deps/pico-sdk
+          submodules: recursive
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+      - name: Configure SDK examples
+        env:
+          PICO_SDK_PATH: ${{ github.workspace }}/.deps/pico-sdk
+        run: cmake -S pico_sdk_example -B build-sdk -G Ninja -DPICO_BOARD=${{ matrix.board }} -DCMAKE_BUILD_TYPE=Release
+      - name: Build both wiring modes
+        run: cmake --build build-sdk --parallel 2
+      - name: Configure on-device pull tests
+        env:
+          PICO_SDK_PATH: ${{ github.workspace }}/.deps/pico-sdk
+        run: cmake -S test/pico_sdk -B build-pulls -G Ninja -DPICO_BOARD=${{ matrix.board }} -DCMAKE_BUILD_TYPE=Release
+      - name: Build on-device pull tests
+        run: cmake --build build-pulls --parallel 2

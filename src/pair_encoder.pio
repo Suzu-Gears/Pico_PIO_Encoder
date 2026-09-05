@@ -1,0 +1,56 @@
+; Copyright (c) 2023 Raspberry Pi (Trading) Ltd.
+; Copyright (c) 2026 Ryota SUZUKI
+; SPDX-License-Identifier: BSD-3-Clause
+; Nonconsecutive A/B decoder derived from the substep counter/age protocol.
+; Two SMs share this 32-word program.
+; IN_BASE selects the counted phase, JMP_PIN selects the other phase.
+; Y counts edges and Y bit 0 remembers the input level. X encodes edge age/sign.
+; Combine YA - YB (plus initial phase offset). Every path takes 17 clocks.
+.program pair_encoder
+.origin 0
+.wrap_target
+    in x, 32                  ; 0: publish age, count as a pair
+    in y, 32
+sample:
+    mov osr, y
+    out isr, 1
+    in pins, 1
+    mov pc, ~isr
+decrement:
+    jmp y-- dec_cont [1]
+dec_cont:
+    set x, 1
+    mov x, ::x
+    jmp common
+increment:
+    mov y, ~y
+    jmp y-- inc_cont
+inc_cont:
+    mov y, ~y
+    set x, 0
+    jmp common
+skip_fifo:
+    jmp sample [1]            ; 15: equal time to the two INs
+common:
+    jmp x-- fifo
+fifo:
+    mov osr, ~status
+    out pc, 4                ; RX empty => 0, otherwise 15
+rising:
+    jmp pin rise_high
+    jmp decrement
+rise_high:
+    jmp increment
+falling:
+    jmp pin fall_high
+    jmp increment
+fall_high:
+    jmp decrement
+    jmp sample               ; 25..27: unused
+    jmp sample
+    jmp sample
+    jmp common [7]           ; 28: old=1 new=1
+    jmp falling              ; 29: old=1 new=0
+    jmp rising               ; 30: old=0 new=1
+    jmp common [7]           ; 31: old=0 new=0
+.wrap

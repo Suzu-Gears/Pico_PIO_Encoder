@@ -1,24 +1,25 @@
-// SubstepEncoder Pico SDK example: print position and speed over USB stdio.
+// Pico_PIO_Encoder Pico SDK example: print position and speed over USB stdio.
 
 #include <cstdio>
 
 #include "pico/stdlib.h"
 
-#include "SubstepEncoder.h"
+#include "Pico_PIO_Encoder.h"
 
 int main() {
   stdio_init_all();
 
-  SubstepEncoder encoder;
-  if (encoder.begin(2) != 0) {
+  Pico_PIO_Encoder encoder;
+  const int result = encoder.beginConsecutive(2, 3);
+  if (result != 0) {
     while (true) {
-      printf("No free PIO block for the encoder\n");
+      printf("%s\n", Pico_PIO_Encoder::beginErrorMessage(result));
       sleep_ms(1000);
     }
   }
 
   while (true) {
-    SubstepEncoder::Snapshot s = encoder.read();
+    Pico_PIO_Encoder::Snapshot s = encoder.read();
     printf("position=%lld steps, speed=%.2f steps/s\n",
            (long long)s.position, (double)s.speed);
     sleep_ms(100);

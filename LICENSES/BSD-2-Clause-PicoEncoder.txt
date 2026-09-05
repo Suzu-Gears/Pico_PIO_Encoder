@@ -1,9 +1,6 @@
 BSD 2-Clause License
 
-Copyright (c) 2022, Paulo Marques, Pedro Pereira, Paulo Costa (PicoEncoder)
-Copyright (c) 2024, pmarques-dev (PicoEncoder)
-Copyright (c) 2026, Ryota SUZUKI (Pico_PIO_Encoder)
-All rights reserved.
+Copyright (c) 2024, pmarques-dev
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
